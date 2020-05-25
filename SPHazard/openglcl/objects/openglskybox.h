@@ -1,0 +1,4 @@
+#ifndef OPENGLSKYBOX_H
+#define OPENGLSKYBOX_H
+
+#endif // OPENGLSKYBOX_H
