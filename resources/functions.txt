@@ -1,0 +1,202 @@
+#Rasterize
+A shape to raster conversion function
+Returns the input raster, but values where the shapefile is present are filled with 
+either an attribute or constant value.
+
+@return Rasterized
+The rasterized shapefile.
+
+@param Raster
+The raster on which the shapefile is rasterized. 
+This raster is not set to be empty, but instead the shape values are written on the previous contents.
+
+@param Shapefile
+A collection of shapes of any topological nature.
+
+@param Attribute Name
+The name of the attribute of which values are used to fill the raster cells.
+
+@param Fill Values
+If this option is selected, no attribute is used, instead a constant value is used to rasterize the shapes.
+The value can be set using the next parameter.
+
+@param Fill Value
+The value that is used to rasterize the shapes if the previous parameter is set to "yes".
+
+@param Include Edge
+The value that is used to rasterize the shapes if the previous parameter is set to "yes".
+
+
+#DrainageNetwork(Map)
+This function create a local drainage network based on an elevation model.
+Directions are indicates as values 1-9:
+9:North-East
+8:North
+7:North-West
+6:East
+5:Pit (no direction, or outlet)
+4:West
+3:South-East
+2:South
+1:South-West
+Initially the local drainage direction is chosen based on a local steepest neighbor (including diagonals).
+Each pit is the head of a sub-catchment that drains into that cell.
+All pits are resolved by finding the lowest outflow point into another sub-catchment.
+This calculation requires projected input.
+@return LDD
+The Local Drainage Network map
+@param Elevation model
+A digital elevation model. The function is indifferent to units, so no conversion needs to be made. 
+Be sure to correct all other input parameters into the same unit system.
+
+
+
+#DrainageNetwork
+This function create a local drainage network based on an elevation model.
+Directions are indicates as values 1-9:
+9:North-East
+8:North
+7:North-West
+6:East
+5:Pit (no direction, or outlet)
+4:West
+3:South-East
+2:South
+1:South-West
+Initially the local drainage direction is chosen based on a local steepest neighbor (including diagonals).
+Each pit is the head of a sub-catchment that drains into that cell.
+Based on the parameters, pits are then resolved by finding the lowest outflow point into another sub-catchment.
+This calculation requires projected input.
+@return LDD
+The Local Drainage Network map
+@param Elevation model
+A digital elevation model. The function is indifferent to units, so no conversion needs to be made. 
+Be sure to correct all other input parameters into the same unit system.
+@param Outflow depth
+@param Core volume
+@param Core Area
+@param Precipiration
+@param LDD Edge Resolve
+
+
+
+#Accuflux 
+Accumulates some spatial source values over a network.
+The source value is per unit area, as with for example precipitation.
+Example: 
+Accuflux(Elevation model,1.0) will provide a drainage area,
+as 1*the surface area of the cell is accumulated
+@return
+Accumulated flux values
+@param
+The drainage network, can be calculated using $DrainageNetwork.
+@param
+Source value, in amount per unit area.
+
+#WindowAverage
+Replaces each value in a raster with the average from the surrounding area.
+The window is square, and the output will contain an average of all the values within the square window.
+Missing values are ignored.
+@return 
+WindowAverage values
+@param Input value
+This map contains the input values.
+@param Averaging Window Size
+This input (can be non-spatial) contains the window size for the operation (units identical to the Input CRS).
+
+#WindowMinimum
+Replaces each value in a raster with the minimum from the surrounding area.
+The window is square, and the output will contain an average of all the values within the square window.
+Missing values are ignored.
+@return 
+WindowMinimum values
+@param Input value
+This map contains the input values.
+@param Averaging Window Size
+This input (can be non-spatial) contains the window size for the operation (units identical to the Input CRS).
+
+#WindowMaximum
+Replaces each value in a raster with the maximum from the surrounding area.
+The window is square, and the output will contain an average of all the values within the square window.
+Missing values are ignored.
+@return 
+WindowMaximum values
+@param Input value
+This map contains the input values.
+@param Averaging Window Size
+This input (can be non-spatial) contains the window size for the operation (units identical to the Input CRS).
+
+#WindowTotal
+Replaces each value in a raster with the total from the surrounding area.
+The window is square, and the output will contain an average of all the values within the square window.
+Missing values are ignored (effectively taken as 0 for calculations).
+@return 
+WindowTotal values
+@param Input value
+This map contains the input values.
+@param Averaging Window Size
+This input (can be non-spatial) contains the window size for the operation (units identical to the Input CRS).
+
+#Slope
+Replaces each value in a raster with the local slope.
+The calculation is done using a 3x3 kernel that estimates the slope in the direction of steepest ascent.
+The result is expressed as a gradient (dy/dx). To calculate an angle, use $atan(Slope())
+Output units are identical to input units.
+This calculation requires projected input.
+@return Slope
+Local slope gradient
+@param Elevation
+This input map contains elevation data.
+
+#AreaArea
+For each gridcell, calculates the total area of the class to which a gridcell belongs.
+Class input should be integer. If non-integer values are found, rounding takes place to the nearest integer.
+Missing value cells remain missing value.
+@return Class Area
+The area of the class that a cell belongs to (units identical to those of input CRS).
+@param Class
+This input map contains classes to which gridcells belong.
+
+#AreaTotal
+For each gridcell, calculates the total value for cells of the class to which a gridcell belongs.
+Class input should be integer. If non-integer values are found, rounding takes place to the nearest integer.
+Missing value cells in either input are set as missing value in the output.
+@return Class Area
+The area of the class that a cell belongs to (units identical to those of input CRS).
+@param Class
+This input map contains classes to which gridcells belong.
+@param Values
+This input map contains values.
+
+#AreaMinimum
+For each gridcell, calculates the minimum value for cells of the class to which a gridcell belongs.
+Class input should be integer. If non-integer values are found, rounding takes place to the nearest integer.
+Missing value cells in either input are set as missing value in the output.
+@return Class Area
+The area of the class that a cell belongs to (units identical to those of input CRS).
+@param Class
+This input map contains classes to which gridcells belong.
+@param Values
+This input map contains values.
+
+#AreaMaximum
+For each gridcell, calculates the maximum value for cells of the class to which a gridcell belongs.
+Class input should be integer. If non-integer values are found, rounding takes place to the nearest integer.
+Missing value cells in either input are set as missing value in the output.
+@return Class Area
+The area of the class that a cell belongs to (units identical to those of input CRS).
+@param Class
+This input map contains classes to which gridcells belong.
+@param Values
+This input map contains values.
+
+#AreaAverage
+For each gridcell, calculates the average value for cells of the class to which a gridcell belongs.
+Class input should be integer. If non-integer values are found, rounding takes place to the nearest integer.
+Missing value cells in either input are set as missing value in the output.
+@return Class Area
+The area of the class that a cell belongs to (units identical to those of input CRS).
+@param Class
+This input map contains classes to which gridcells belong.
+@param Values
+This input map contains values.
