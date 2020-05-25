@@ -1,0 +1,4 @@
+#ifndef SCRIPTQSTRING_H
+#define SCRIPTQSTRING_H
+
+#endif // SCRIPTQSTRING_H
