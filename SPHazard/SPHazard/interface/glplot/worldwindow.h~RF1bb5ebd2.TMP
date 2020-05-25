@@ -1,0 +1,712 @@
+#ifndef WORLD2DWINDOW_H
+#define WORLD2DWINDOW_H
+
+#include "openglclmanager.h"
+#include "qcolor.h"
+#include "model.h"
+#include "map.h"
+#include "openglcltexture.h"
+#include "openglprogram.h"
+#include "iomanager.h"
+#include "sphazardmath.h"
+#include "QObject"
+#include "openglcldatabuffer.h"
+#include "colorf.h"
+#include "uigeolayer.h"
+#include "uirasterlayer.h"
+#include "uivectorlayer.h"
+#include "uimodelrasterlayer.h"
+#include "uigeolayer.h"
+#include "uimapedge.h"
+#include "worldgltransforms.h"
+#include "uimultirasterlayer.h"
+#include "uiwebtilelayer.h"
+#include "uimodelpointlayer.h"
+#include "uilayereditor.h"
+#include "gl3dcamera.h"
+#include "gl3dcameracontroller.h"
+#include "gl2dcamera.h"
+#include "gl2dcameracontroller.h"
+#include "QTime"
+#include "QList"
+#include "gl3dskybox.h"
+
+typedef struct World2DMouseState
+{
+    float scrollold = 0.0f;
+    float scroll = 0.0f;
+    bool dragging = false;
+    bool in = true;
+
+    float Drag_x = 0.0f;
+    float Drag_y = 0.0f;
+    float PosOld_x = 0.0f;
+    float PosOld_y = 0.0f;
+    float PosDO_x = 0.0f;
+    float PosDO_y = 0.0f;
+    float Pos_x = 0.0f;
+    float Pos_y = 0.0f;
+
+    bool move_first = true;
+    float Move_X = 0.0f;
+    float Move_Y = 0.0f;
+
+    float Scroll_x = 0.0f;
+    float Scroll_y = 0.0f;
+    float ScrollOld_x = 0.0f;
+    float ScrollOld_y = 0.0f;
+
+    bool movescroll_first = true;
+    float MoveScroll_X = 0.0f;
+    float MoveScroll_Y = 0.0f;
+
+    QList<int> KeyEvents;
+    QList<int> KeyAction;
+    QList<int> KeyMods;
+
+    QList<int> MouseButtonEvents;
+    QList<int> MouseButtonKeyAction;
+
+} World2DMouseState;
+
+class WorldWindow : public QObject, public GLListener
+{
+    Q_OBJECT;
+
+public:
+
+
+private:
+    //new
+    //layers
+
+    QList<UILayer *> m_UILayerList;
+
+    //internal signaling that
+    bool m_UILayersChanged;
+    bool m_CRSChanged =false;
+    //
+    GeoWindowState m_CurrentWindowState;
+    GeoWindowState m_CurrentDrawWindowState;
+
+    World2DMouseState m_MouseState;
+
+    //general draw settings:
+    bool m_DrawUI = true;
+    bool m_DrawLines = false;
+    double m_DrawUIScale = 1.0;
+    bool m_DrawLegends = true;
+    bool m_Draw3D = false;
+    bool m_Draw3DGlobe = false;
+
+    GL3DCamera * m_Camera3D;
+    GL3DCameraController *m_Camera3DController;
+    GL2DCamera * m_Camera2D;
+    GL2DCameraController *m_Camera2DController;
+
+    QElapsedTimer m_time;
+    qint64 m_timeold;
+    float m_GLDT;
+    bool dt_first = true;
+
+public:
+    QMutex m_UILayerMutex;
+    QMutex m_CRSMutex;
+    //default drawing programs
+
+
+    WorldGLTransformManager * m_TransformManager;
+    OpenGLCLManager * m_OpenGLCLManager;
+    SPHModel * m_Model;
+    QString m_KernelDir;
+
+    GeoProjection m_CurrentProjection;
+
+    inline WorldWindow(OpenGLCLManager * glclm) : QObject()
+    {
+        m_OpenGLCLManager = glclm;
+        m_OpenGLCLManager->AddListener(this);
+
+        m_TransformManager = new WorldGLTransformManager(glclm);
+        AddUILayer(new UIMapEdgeLayer());
+        AddUILayer(new UISkyBoxLayer());
+        AddUILayer(new UISkyBoxLayer());
+        GeoProjection p;
+        p.SetGeneric();
+        SetCurrentProjection(p,true);
+
+        m_Camera3D = new GL3DCamera();
+        m_Camera3DController = new GL3DCameraController(m_Camera3D);
+        m_Camera2D = new GL2DCamera();
+        m_Camera2DController = new GL2DCameraController(m_Camera2D);
+
+        m_time.start();
+        m_timeold = m_time.nsecsElapsed();
+        m_GLDT = 0.0f;
+    }
+    inline void SetDraw3D(bool d)
+    {
+        m_UILayerMutex.lock();
+        m_Draw3D = d;
+        m_UILayerMutex.unlock();
+    }
+    inline void SetDraw3DGlobe(bool d)
+    {
+        m_UILayerMutex.lock();
+        m_Draw3DGlobe = d;
+        m_UILayerMutex.unlock();
+    }
+    inline void SetUIDraw(bool d)
+    {
+         m_UILayerMutex.lock();
+         m_DrawUI = d;
+         m_UILayerMutex.unlock();
+    }
+    inline void SetLinesDraw(bool d)
+    {
+         m_UILayerMutex.lock();
+         m_DrawLines = d;
+         m_UILayerMutex.unlock();
+    }
+    inline void SetUIScale(double d)
+    {
+         m_UILayerMutex.lock();
+         m_DrawUIScale = d;
+         m_UILayerMutex.unlock();
+    }
+    inline void SetLegendDraw(bool d)
+    {
+        m_UILayerMutex.lock();
+        m_DrawLegends = d;
+        m_UILayerMutex.unlock();
+    }
+    inline GeoProjection GetCurrentProjection()
+    {
+        return m_CurrentWindowState.projection;
+    }
+    inline void SetCurrentProjection(GeoProjection p, bool forceupdate = false)
+    {
+        if(!m_CurrentWindowState.projection.IsEqualTo(p) || forceupdate)
+        {
+            m_CRSMutex.lock();
+
+            m_CRSChanged =true;
+            m_CurrentProjection = p;
+
+            m_CRSMutex.unlock();
+        }
+    }
+
+    inline GeoWindowState GetCurrentWindowState()
+    {
+        return m_CurrentWindowState;
+    }
+    inline QImage *DoExternalDraw(GeoWindowState s)
+    {
+
+        m_OpenGLCLManager->m_GLOutputUIMutex.lock();
+        m_OpenGLCLManager->m_GLMutex.lock();
+
+        m_CurrentDrawWindowState = s;
+
+
+        glfwMakeContextCurrent(m_OpenGLCLManager->window);
+
+        OpenGLCLMSAARenderTarget * Target = new OpenGLCLMSAARenderTarget();
+
+        Target->Create(s.scr_pixwidth,s.scr_pixheight,2);
+
+        m_CurrentDrawWindowState.GL_FrameBuffer = Target->GetFrameBuffer();
+
+        this->DrawToFrameBuffer2D(m_CurrentDrawWindowState);
+        Target->BlitToTexture();
+
+        QImage * Im = Target->ToQImage();
+
+        Target->Destroy();
+
+        glfwMakeContextCurrent(NULL);
+
+        m_OpenGLCLManager->m_GLOutputUIMutex.unlock();
+        m_OpenGLCLManager->m_GLMutex.unlock();
+
+        return Im;
+    }
+
+    inline void SignalClose()
+    {
+            glfwSetWindowShouldClose(m_OpenGLCLManager->window,GL_TRUE);
+    }
+
+    inline void SetModel( SPHModel * m)
+    {
+        m_Model = m;
+
+    }
+    inline int AddUILayer(UILayer *ML, bool emitsignal = true)
+    {
+        m_UILayerMutex.lock();
+
+        if(GetUILayers().length() == 0)
+        {
+            if(ML->IsGeo())
+            {
+                LookAt((UIGeoLayer*)(ML));
+            }
+        }
+
+        //find new id number that is the lowest available positive integer
+        int id = 0;
+
+        if (m_UILayerList.length() > 0) {
+            int * il = new int[m_UILayerList.length()];
+
+            for(int i = m_UILayerList.length()-1; i > -1; i--)
+            {
+                il[i] = m_UILayerList.at(i)->GetID();
+            }
+
+            id = SPHazardMath::findMissingPositive(il,m_UILayerList.length());
+            delete[] il;
+
+        }else {
+            id = 1;
+        }
+
+        ML->SetID(id);
+        m_UILayerList.append(ML);
+        m_UILayersChanged = true;
+
+        if(emitsignal)
+        {
+            emit OnMapsChanged();
+        }
+        m_UILayerMutex.unlock();
+
+    }
+    inline UILayer * GetUILayerFromFile(QString path)
+    {
+
+        QFileInfo fileInfo(path);
+        QString filename(fileInfo.fileName());
+        QString filedir(fileInfo.dir().path());
+        QList<cTMap *> _M;
+
+        try
+        {
+            _M = readRasterList(path);
+        }
+        catch (int e)
+        {
+           return nullptr;
+        }
+
+        UILayer * ret;
+
+        if(_M.length() == 1)
+        {
+            UIRasterLayer *HS = new UIRasterLayer(_M.at(0),filename,true,path);
+            HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERUI),true);
+            ret = HS;
+
+        }else if(_M.length() > 1)
+        {
+            UIMultiRasterLayer *HS = new UIMultiRasterLayer(_M,filename,true,path);
+            HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_MULTIRASTER),true);
+            ret = HS;
+        }
+
+        return ret;
+
+    }
+
+    inline UILayer * GetUILayerFromMap(cTMap * map, QString name = "", bool native = false)
+    {
+        if(map == nullptr)
+        {
+            return nullptr;
+        }
+        UIRasterLayer *HS = new UIRasterLayer(map,name,false,"",native);
+        HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERUI),true);
+        return HS;
+
+    }
+
+    inline UILayer * GetUIVectorLayerFromFile(QString path)
+    {
+
+        QFileInfo fileInfo(path);
+        QString filename(fileInfo.fileName());
+        QString filedir(fileInfo.dir().path());
+        ShapeFile * _M;
+
+        try
+        {
+            _M = LoadVector(path);
+        }
+        catch (int e)
+        {
+           return nullptr;
+        }
+
+        UIVectorLayer *HS = new UIVectorLayer(_M,filename,true,path);
+        HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_VECTORUI),true);
+
+        return HS;
+
+    }
+
+    inline UILayer * GetUILayerFromShapeFile(ShapeFile * map, QString name = "", bool native = false)
+    {
+        if(map == nullptr)
+        {
+            return nullptr;
+        }
+        UIVectorLayer *HS = new UIVectorLayer(map,name,false,"",native);
+        HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_VECTORUI),true);
+        return HS;
+
+    }
+
+    inline UILayer * GetGoogleLayer()
+    {
+        UIWebTileLayer * HS = new UIWebTileLayer(GetDefaultTileServer(TILESERVER_GOOGLEEARTH));
+        return HS;
+    }
+    inline void RemoveUILayer(UILayer *ML, bool emitsignal = true)
+    {
+        ML->SetRemove();
+    }
+    inline void SetUILayerAs(UILayer *ML,  bool emitsignal = false)
+    {
+        m_UILayerMutex.lock();
+        for(int i = m_UILayerList.length()-1; i > -1; i--)
+        {
+            if(m_UILayerList.at(i)->GetID() == ML->GetID())
+            {
+                m_UILayerList.replace(i,ML);
+                break;
+            }
+        }
+        m_UILayerMutex.unlock();
+
+        if(emitsignal)
+        {
+            emit OnMapsChanged();
+        }
+
+    }
+
+    inline QList<UILayer *> GetUILayers()
+    {
+        QList<UILayer *> ls;
+        for(int i = m_UILayerList.length()-1; i > -1; i--)
+        {
+            if(m_UILayerList.at(i)->IsUser())
+            {
+                ls.append(m_UILayerList.at(i));
+            }
+        }
+        return ls;
+    }
+
+    inline void SetLayerOrder(QList<UILayer *> newlist, bool emitsignal = false)
+    {
+        m_UILayerMutex.lock();
+
+        for(int i = m_UILayerList.length()-1; i > -1; i--)
+        {
+            if(m_UILayerList.at(i)->IsUser())
+            {
+                m_UILayerList.removeAt(i);
+            }
+        }
+
+        for(int i = 0; i < newlist.length(); i++)
+        {
+            m_UILayerList.append(newlist.at(i));
+        }
+
+        m_UILayerMutex.unlock();
+
+        if(emitsignal)
+        {
+            emit OnMapsChanged();
+        }
+
+    }
+
+    inline int GetUILayerCount()
+    {
+        return m_UILayerList.length();
+    }
+
+    inline UILayer* GetUILayer(int i)
+    {
+        return m_UILayerList.at(i);
+    }
+
+    inline void AddNativeUILayers()
+    {
+        UIModelRasterLayer *HS = new UIModelRasterLayer(m_Model->HILLSHADE,m_Model->TUI_HILLSHADE, "Hillshade","HS (model)",true);
+        HS->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERHS),true);
+        AddUILayer(HS,false);
+
+        if((m_Model->m_DoSlopeFailure || m_Model->m_DoInitialSolids) && m_Model->m_DoParticleSolids)
+        {
+            UIModelRasterLayer *WH = new UIModelRasterLayer(m_Model->MUIHALL,m_Model->TUI_HALL, "Water Height (m)","WH (Model)",true);
+            WH->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERWH),true);
+            AddUILayer(WH,false);
+        }else {
+            UIModelRasterLayer *WH = new UIModelRasterLayer(m_Model->MUIH,m_Model->TUI_H, "Water Height (m)","WH (Model)",true);
+            WH->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERWH),true);
+            AddUILayer(WH,false);
+
+            }
+
+
+        if(m_Model->m_DoSlopeFailure || m_Model->m_DoInitialSolids)
+        {
+            UIModelRasterLayer *SH = new UIModelRasterLayer(m_Model->MUIHS,m_Model->TUI_HS, "Solid Height (m)","SH (Model)",true);
+            SH->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERWH),true);
+            AddUILayer(SH,false);
+        }
+
+        UIRasterLayer *UI = new UIModelRasterLayer(m_Model->MUI,m_Model->TUI_UI, "User Map","UI (Model)",true);
+        UI->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERUI),true);
+        UI->SetDraw(false);
+
+
+
+        AddUILayer(UI,false);
+
+
+        if(m_Model->m_DoParticleSolids && (m_Model->m_DoInitialSolids || (m_Model->m_DoSlopeFailure && m_Model->m_DoHydrology && m_Model->m_DoSlopeStability)))
+        {
+               m_Model->m_DataPos;
+
+               UIModelPointLayer *UIP = new UIModelPointLayer(m_Model->m_DataPos,m_Model->DEM->west(),m_Model->DEM->north());
+               UIP->SetStyle(GetStyleDefault(SPH_STYLE_DEFAULT_RASTERUI),true);
+
+               AddUILayer(UIP,false);
+        }
+
+
+        LookAt(HS);
+
+        emit OnMapsChanged();
+
+    }
+
+    inline void RemoveNativeUILayers()
+    {
+        m_UILayerMutex.lock();
+
+        for(int i = m_UILayerList.length()-1; i > -1; i--)
+        {
+            if(m_UILayerList.at(i)->IsModel() == true)
+            {
+                m_UILayerList.removeAt(i);
+            }
+        }
+
+        m_UILayersChanged = true;
+        m_UILayerMutex.unlock();
+        {
+            emit OnMapsChanged();
+        }
+    }
+
+
+
+    //control of the display geolocation
+
+    inline BoundingBox GetLook()
+    {
+        return BoundingBox(m_CurrentWindowState.tlx,m_CurrentWindowState.brx,m_CurrentWindowState.tly,m_CurrentWindowState.bry);
+    }
+
+    inline void LookAt(UIGeoLayer* geolayer)
+    {
+        BoundingBox bb_orgref = geolayer->GetBoundingBox();
+
+        GeoCoordTransformer * transformer = GeoCoordTransformer::GetCoordTransformer(geolayer->GetProjection(),m_CurrentWindowState.projection);
+
+        BoundingBox bb_newref = transformer->Transform(bb_orgref);
+
+        delete transformer;
+
+        LookAt(bb_newref);
+    }
+
+    inline void LookAt(BoundingBox b)
+    {
+        m_Camera2D->LookAt(b);
+        m_Camera3D->PlaceAndLookAtAuto(b);
+
+        //get screen dim (min 1)
+        float scw = std::max(1.0f,((float)(m_OpenGLCLManager->GL_GLOBAL.Width)));
+        float sch = std::max(1.0f,(float)( m_OpenGLCLManager->GL_GLOBAL.Height));
+
+        m_CurrentWindowState.translation_x = b.GetCenterX();
+        m_CurrentWindowState.translation_y = b.GetCenterY();
+
+        m_CurrentWindowState.scale = b.GetSizeX();
+
+        m_CurrentWindowState.width = m_CurrentWindowState.scale;
+        float ratiohw = (sch/scw);
+        m_CurrentWindowState.height = m_CurrentWindowState.scale * ratiohw;
+
+        m_CurrentWindowState.tlx = m_CurrentWindowState.translation_x - 0.5f *m_CurrentWindowState.width;
+        m_CurrentWindowState.brx = m_CurrentWindowState.translation_x + 0.5f *m_CurrentWindowState.width;
+        m_CurrentWindowState.tly = m_CurrentWindowState.translation_y - 0.5f *m_CurrentWindowState.height;
+        m_CurrentWindowState.bry = m_CurrentWindowState.translation_y + 0.5f *m_CurrentWindowState.height;
+
+    }
+
+
+
+
+
+
+
+
+
+
+    //input listener functions as called by OpenGLCLManager
+    //here we also call all the ui functions for the layers:
+    //inline void OnMouseMove(SPHVector2 pos, SPHVector2 mov)
+    //inline void OnMouseScroll(SPHVector2 pos, SPHVector2 mov)
+    //inline void OnMousePressed(int button, int pressed)
+    //inline void OnMouseLeave(bool leave)
+    //inline void OnKeyPressed(int key, bool pressed)
+    //inline void OnGeoMousePressed(int button, GeoWindowState s, SPHVector2 pos)
+    //inline void OnGeoMouseMove(GeoWindowState s, SPHVector2 pos, SPHVector2 mov)
+
+    //furthermore, we have to call the ui functions for the currently active editor
+
+    inline void OnMouseScroll(double scrollx ,double scrolly) override
+    {
+        if(m_MouseState.movescroll_first)
+        {
+            m_MouseState.ScrollOld_x = scrollx;
+            m_MouseState.ScrollOld_y = scrolly;
+            m_MouseState.movescroll_first = false;
+        }
+
+        m_MouseState.Scroll_x = scrollx;
+        m_MouseState.Scroll_y = scrolly;
+
+        m_MouseState.scroll += scrolly;
+
+        m_MouseState.MoveScroll_X += scrollx;
+        m_MouseState.MoveScroll_Y += scrolly;
+
+
+    }
+    inline void OnMouseMove(double posx,double posy) override
+    {
+        if(m_MouseState.move_first == true)
+        {
+            m_MouseState.PosDO_x = posx;
+            m_MouseState.PosDO_y = posy;
+            m_MouseState.move_first = false;
+        }
+
+
+        m_MouseState.Pos_x = posx;
+        m_MouseState.Pos_y = posy;
+
+        double dx = m_MouseState.Pos_x - m_MouseState.PosDO_x;
+        double dy = m_MouseState.Pos_y - m_MouseState.PosDO_y;
+
+        m_MouseState.Move_X -=dx;
+        m_MouseState.Move_Y +=dy;
+
+        if(m_MouseState.dragging)
+        {
+
+            m_MouseState.Drag_x -=dx;
+            m_MouseState.Drag_y +=dy;
+            m_MouseState.PosDO_x = m_MouseState.Pos_x;
+            m_MouseState.PosDO_y = m_MouseState.Pos_y;
+        }else {
+
+            m_MouseState.PosDO_x = m_MouseState.Pos_x;
+            m_MouseState.PosDO_y = m_MouseState.Pos_y;
+        }
+
+
+
+    }
+    inline void OnMouseInOut(bool enter) override
+    {
+        m_MouseState.in = enter;
+
+    }
+    inline void OnMouseKey( int key, int action, int mods) override
+    {
+
+        m_MouseState.MouseButtonEvents.append(key);
+        m_MouseState.MouseButtonKeyAction.append(action);
+
+        if (key == GLFW_MOUSE_BUTTON_1  && action == GLFW_PRESS) {
+            m_MouseState.dragging = true;
+        }else if(key == GLFW_MOUSE_BUTTON_1  && action == GLFW_RELEASE) {
+            m_MouseState.dragging = false;
+        }
+        if (key == GLFW_MOUSE_BUTTON_2  && action == GLFW_PRESS) {
+
+        }else if (key == GLFW_MOUSE_BUTTON_2  && action == GLFW_RELEASE) {
+
+        }
+
+    }
+    inline void OnFrameBufferSize(int w,int h) override
+    {
+
+
+    }
+    inline void OnKey(int key, int action, int mods) override
+    {
+        m_MouseState.KeyEvents.append(key);
+        m_MouseState.KeyAction.append(action);
+        m_MouseState.KeyMods.append(mods);
+
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+
+
+
+        }
+
+    }
+    /////
+    /// \brief UpdateCurrentWindowState
+    /// This function calculates, based on the MouseState
+    /// the current window state (zoom, extent, location etc..)
+    ///
+    /// \return true if the user has altered the windowstate
+    ///
+    bool UpdateCurrentWindowState();
+    bool UpdateCamera();
+    bool UpdateTransformers();
+
+    void Draw();
+
+    void DrawToFrameBuffer2D(GeoWindowState S);
+    void Draw2DPlotDataToBuffer(GeoWindowState S);
+    void DrawToFrameBuffer3D(GeoWindowState S);
+    void DrawGlobeToBuffer(GeoWindowState S);
+    void Draw3DPlotDataToBuffer(GeoWindowState S);
+    void DrawBaseLayers3D(GeoWindowState S);
+    void DrawColoredTerrain3D(GeoWindowState S);
+    void Draw3DObjects(GeoWindowState S);
+    void DrawGeoLayers2DColor(GeoWindowState S);
+    void DrawGeoLayers2DElevation(GeoWindowState S);
+    void DrawUILayers(GeoWindowState S);
+signals:
+    void OnMapsChanged();
+
+};
+
+#endif // WORLD2DWINDOW_H
